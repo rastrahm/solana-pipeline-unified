@@ -1,0 +1,19 @@
+[package]
+name = "solana-pipeline-unified"
+version = "0.1.0"
+edition = "2021"
+description = "Orquestador de aprendizaje: une mini-solana-turbine con nvme-state-db"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "solana_pipeline_unified"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solana-pipeline-unified"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+thiserror = "2"

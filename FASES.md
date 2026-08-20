@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio al crear este archivo: **Fase 0 en curso** (plan + reglas). Sin `Cargo.toml` ni `src/` todavía.
+Estado del repositorio: **Fase 1 completa**. Siguiente: fase 2 (deps path a turbine/nvme).
 
 ---
 
@@ -102,21 +102,23 @@ solana-pipeline-unified/
 
 ## Fase 1 — Crate vacío, errores y módulos stub
 
-**Estado:** pendiente (requiere `autoriza fase 1`).
+**Estado:** completa (`cargo test` 5/5, `cargo clippy -D warnings` limpio).
 
 **Objetivo de aprendizaje:** crate lib+bin, `thiserror`, módulos públicos documentados sin lógica aún.
 
 **Alcance**
 
 - `Cargo.toml` (edition 2021+, `thiserror`, `anyhow` solo en el binario).
-- Aún **sin** path deps a turbine/nvme (eso es fase 2), o stubs de features documentados — se fijará al autorizar.
+- Aún **sin** path deps a turbine/nvme (eso es fase 2).
 - `src/lib.rs`, `src/main.rs` (main mínimo), `src/error.rs`.
-- Stubs: `src/pipeline/{mod,bridge,orchestrator}.rs` con tipos/funciones documentadas y `todo!` / `unimplemented` acotados solo si hace falta compilar tests de humo (preferir stubs que compilen sin panics en tests).
+- Stubs: `src/pipeline/{mod,bridge,orchestrator}.rs` con tipos/funciones documentadas que devuelven `Error::Unimplemented` (sin `todo!` en tests).
 - Test de humo: el crate compila; `Error` implementa `std::error::Error`.
 
 **Fuera de alcance:** UDP, FEC, `Engine`, colas reales, I/O.
 
 **Criterio de cierre:** `cargo test` y `cargo clippy -D warnings` verdes.
+
+**Hecho:** `Cargo.toml`, `.gitignore`, `src/{lib,main,error}.rs`, `src/pipeline/{mod,bridge,orchestrator}.rs`; variantes placeholder `BridgeSaturated` / `PersistFailed` / `InvalidOrchestratorState` / `PipelineStall` para fases siguientes.
 
 ---
 
