@@ -1,0 +1,71 @@
+# .cursorrules — solana-pipeline-unified
+
+## PROJECT OVERVIEW
+`solana-pipeline-unified` is a **learning** orchestrator: it wires `mini-solana-turbine` (UDP shred ingest, FEC reconstruction, Turbine-style forward) to `nvme-state-db` (the **only** persistence layer). It does not implement shred parsing, Reed-Solomon, WAL, MemTable, or SSTables.
+
+Work proceeds in **authorized phases** documented in `FASES.md`. Do not implement a phase without explicit user approval (`autoriza fase N`).
+
+**Precedence:** This file and `FASES.md` override generic Rust habits when they conflict.
+
+---
+
+## 1. ROLES (NON-NEGOTIABLE)
+
+| Concern | Owner crate |
+| --- | --- |
+| UDP / `io_uring` recv-send, shred types, FEC, Turbine tree | `mini-solana-turbine` |
+| All disk / durable state: WAL, MemTable, SST, `O_DIRECT`, mmap | `nvme-state-db` |
+| Lifecycle, bounded queues, calling public APIs of the two crates | **this crate** |
+
+- Persist only through `nvme_state_db::Engine` (`put` / `get` / `delete` / `flush` / …).
+- Do **not** open state files, allocate WAL-aligned pages, or mention Direct I/O as a duty of this crate.
+- Do **not** duplicate turbine or nvme logic; import their public types.
+
+**Solana learning map (simplified):** turbine ≈ shred propagation (TVU slice); nvme ≈ account-state KV (AccountsDB-like); this crate ≈ glue. Full Blockstore, replay, and TPU are out of scope unless a phase explicitly adds them.
+
+---
+
+## 2. TECHNICAL STACK & CONSTRAINTS
+
+- **Language:** Rust 2021+.
+- **Internal deps (path or git):** `mini-solana-turbine`, `nvme-state-db`.
+- **Third-party (orchestrator only):** `crossbeam-channel`, `thiserror`, `criterion`; `anyhow` only in `main.rs`. Add `tokio-uring` only if this crate drives ingress directly (prefer reusing turbine’s `UdpIngress`).
+- **Do not add** `memmap2`, `libc` O_DIRECT helpers, or WAL alignment code here — that belongs in nvme.
+- **Target OS:** Linux x86_64 (Kernel 6.8+), matching the sibling crates.
+- **Production `src/`:** no `unwrap()` / `expect()`.
+- **Hot path:** avoid unnecessary heap allocs and extra copies when moving reconstructed bytes into `Engine::put`; WAL 4K alignment stays inside nvme.
+- **`unsafe`:** only if strictly required and marked `// SAFETY:`.
+
+---
+
+## 3. ARCHITECTURE
+
+- **Orchestration only:** `pipeline/orchestrator.rs` (start/stop), `pipeline/bridge.rs` (bounded queue → `Engine`).
+- **Backpressure:** bounded `crossbeam-channel`; saturation → typed `thiserror`, do not block network workers indefinitely.
+- **Inlining:** `#[inline(always)]` on small bridge transfer helpers when measured/needed.
+- **Errors:** pipeline `thiserror` (channel full, engine errors mapped, stalls); binary bootstrap with `anyhow`.
+- **Docs (learning project):** public items get `///` (purpose, inputs, returns/errors). Private helpers may use `//`.
+- **TDD:** tests before implementation; `cargo test` before claiming a phase done.
+- **Phases:** follow `FASES.md`; one phase at a time.
+
+---
+
+## 4. PROJECT DIRECTORY STRUCTURE
+
+```text
+solana-pipeline-unified/
+├── Cargo.toml
+├── FASES.md
+├── .cursorrules
+├── src/
+│   ├── lib.rs
+│   ├── main.rs
+│   ├── error.rs
+│   └── pipeline/
+│       ├── mod.rs
+│       ├── bridge.rs
+│       └── orchestrator.rs
+├── tests/
+└── benches/
+    └── e2e_throughput.rs
+```
