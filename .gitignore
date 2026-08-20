@@ -1,0 +1,39 @@
+# Rust build
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE / editor
+.idea/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Profiling / benches
+perf.data
+perf.data.old
+flamegraph.svg
+*.profraw
+*.profdata
+criterion/
+
+# Debug / core
+core
+*.core
+
+# Env / secrets
+.env
+.env.*
+*.pem
+
+# Graphify / generated analysis
+graphify-out/
