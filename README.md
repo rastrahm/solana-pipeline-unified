@@ -107,8 +107,17 @@ solana-pipeline-unified/
 │       ├── bridge.rs
 │       ├── orchestrator.rs
 │       └── outcome.rs
-└── tests/
-    ├── deps_iniciales.rs
-    ├── ingest_to_bridge.rs
-    └── flush_recovery.rs
+├── tests/
+│   ├── deps_iniciales.rs
+│   ├── ingest_to_bridge.rs
+│   └── flush_recovery.rs
+└── benches/
+    └── e2e_throughput.rs
 ```
+Bench (laboratorio, no mainnet):
+
+```bash
+cargo bench --bench e2e_throughput --features simd
+```
+
+Números de línea base: ver [`FASES.md`](FASES.md) (fase 8).

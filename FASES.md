@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 7 completa**. Siguiente: fase 8 (bench e2e criterion).
+Estado del repositorio: **Fase 8 completa** (plan de aprendizaje cerrado).
 
 ---
 
@@ -249,18 +249,38 @@ solana-pipeline-unified/
 
 ## Fase 8 — Bench e2e (criterion)
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo bench --bench e2e_throughput --features simd`).
 
-**Objetivo de aprendizaje:** medir el camino paquete/registro → `put` (latencia / throughput de laboratorio), sin confundirlo con Gbps de mainnet.
+**Objetivo de aprendizaje:** medir paquete/registro → `put` en laboratorio (no Gbps de mainnet).
 
 **Alcance**
 
-- `benches/e2e_throughput.rs`.
-- Línea base anotada en este archivo al cerrar.
+- `benches/e2e_throughput.rs`: `submit_durable` (encolar + esperar `get`) e `ingest` data+code.
+- Línea base anotada abajo.
 
-**Fuera de alcance:** optimizar nvme o FEC dentro de este crate (se sube issue/fase en el repo dueño).
+**Fuera de alcance:** optimizar nvme o FEC en este crate.
 
-**Criterio de cierre:** bench ejecutable; números anotados con hardware/FS usados.
+**Criterio de cierre:** bench ejecutable; números + hardware anotados.
+
+**Hecho:** bench Criterion + percentiles manuales.
+
+### Línea base (2026-08-21)
+
+| Entorno | Valor |
+| --- | --- |
+| Host | Linux 6.18.7 x86_64 |
+| CPU | Intel Core Ultra 9 275HX |
+| Disco / FS | NVMe (`/dev/nvme0n1p2`) · ext4 |
+| Comando | `cargo bench --bench e2e_throughput --features simd` |
+
+| Medición | Resultado (laboratorio) |
+| --- | --- |
+| `submit_32b_durable` (Criterion) | ~10.1 ms/op · ~99 elem/s |
+| `submit_durable` manual (n=40) | mean ~9.8 ms · p50 ~9.8 ms · p99 ~10.3 ms · ~102 ops/s |
+| `data_plus_code_reconstruct` (Criterion, incluye start/shutdown) | ~60.2 ms/par |
+| `ingest_data+code` manual (solo ingest, n=8) | mean ~232 µs · p50 ~269 µs |
+
+Nota: el WAL `O_SYNC` de `nvme-state-db` domina `submit_durable`. El ingest manual sin open/close es mucho más rápido que el bench Criterion del par (que reabre el motor cada iteración).
 
 ---
 
