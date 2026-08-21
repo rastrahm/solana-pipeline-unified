@@ -1,8 +1,8 @@
 //! Orquestador de aprendizaje: cablea red/FEC (`mini-solana-turbine`) con
 //! persistencia (`nvme-state-db`).
 //!
-//! Fase 4: [`Bridge`] con cola acotada hacia `Engine::put`. La ingestión UDP
-//! llega en la fase 5.
+//! Fase 5: `ingest_bytes` (Turbine en memoria) → bridge → `Engine::put`.
+//! El envío UDP de reenvío no forma parte de esta fase.
 
 #![deny(missing_docs)]
 
@@ -11,8 +11,8 @@ pub mod pipeline;
 
 pub use error::Error;
 pub use pipeline::{
-    bridge_channel, make_learn_key, Bridge, BridgeReceiver, BridgeSender, Orchestrator,
-    OrchestratorConfig, StateRecord, DEFAULT_QUEUE_CAPACITY, LEARN_KEY_PREFIX,
+    bridge_channel, make_learn_key, Bridge, BridgeReceiver, BridgeSender, IngestOutcome,
+    Orchestrator, OrchestratorConfig, StateRecord, DEFAULT_QUEUE_CAPACITY, LEARN_KEY_PREFIX,
 };
 
 #[cfg(test)]

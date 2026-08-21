@@ -1,11 +1,15 @@
-//! Orchestrator: ciclo de vida del pipeline (fases 3–4).
+//! Orchestrator: ciclo de vida del pipeline (fases 3–5).
 //!
 //! Abre el [`nvme_state_db::Engine`], arranca el [`crate::pipeline::Bridge`]
-//! (cola → `put`) y, con feature `simd`, prepara un
-//! [`mini_solana_turbine::Pipeline`] en memoria. UDP llega en fase 5.
+//! y, con feature `simd`, ingeriere shreds vía [`mini_solana_turbine::Pipeline`]
+//! en memoria (bytes sintéticos). El envío UDP de reenvío queda fuera de esta
+//! fase; el plan de forward sí se calcula y se reporta.
 
 use crate::error::Error;
 use crate::pipeline::bridge::Bridge;
+#[cfg(feature = "simd")]
+use crate::pipeline::bridge::make_learn_key;
+use crate::pipeline::outcome::IngestOutcome;
 use mini_solana_turbine::{Node, NodeId, Stake};
 use nvme_state_db::{Engine, EngineOptions};
 use std::net::SocketAddr;
@@ -13,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(feature = "simd")]
-use mini_solana_turbine::{turbine::tree::build, Pipeline};
+use mini_solana_turbine::{pipeline::MAX_SHARDS, turbine::tree::build, Pipeline};
 
 /// Capacidad por defecto de la cola del bridge.
 pub const DEFAULT_QUEUE_CAPACITY: usize = 128;
@@ -31,7 +35,7 @@ pub struct OrchestratorConfig {
     pub self_id: NodeId,
     /// Stake local (solo ordena el árbol; no es economía real).
     pub self_stake: Stake,
-    /// Dirección anunciada para reenvío futuro (fase 5); no se hace bind aquí.
+    /// Dirección anunciada para reenvío futuro; no se hace bind en fase 5.
     pub self_addr: SocketAddr,
 }
 
@@ -202,7 +206,6 @@ impl Orchestrator {
         {
             self.pipeline = None;
         }
-        // Drop del Engine hace join del worker `nvme-sst-flush`.
         self.engine = None;
         self.phase = Phase::Idle;
         Ok(())
@@ -217,6 +220,87 @@ impl Orchestrator {
     pub fn pipeline(&self) -> Option<&Pipeline> {
         self.pipeline.as_ref()
     }
+
+    /// Purpose: ingiere un shred en bytes (camino de laboratorio, sin UDP).
+    ///
+    /// Tras un ingest OK, encola al bridge todos los data shards ya presentes
+    /// en el scratch (`learn/v1/shard/N`). El reenvío UDP no se hace aquí; solo
+    /// se informa cuántos destinos calcularía Turbine.
+    ///
+    /// Inputs: `bytes` — paquete shred completo (mismo contrato que turbine).
+    ///
+    /// Returns: [`IngestOutcome`], o error de estado / Turbine / bridge.
+    #[cfg(feature = "simd")]
+    pub fn ingest_bytes(&mut self, bytes: &[u8]) -> Result<IngestOutcome, Error> {
+        if self.phase != Phase::Running {
+            return Err(Error::InvalidOrchestratorState);
+        }
+        let result = {
+            let pipe = self
+                .pipeline
+                .as_mut()
+                .ok_or(Error::InvalidOrchestratorState)?;
+            pipe.ingest_bytes(bytes)
+                .map_err(|_| Error::TurbineIngestFailed)?
+        };
+        let records_submitted = self.persist_available_shards()?;
+        Ok(IngestOutcome {
+            reconstructed: result.reconstructed(),
+            forward_dest_count: result.forward().len(),
+            records_submitted,
+        })
+    }
+
+    /// Purpose: encola cada `original_shard` disponible hacia el bridge.
+    ///
+    /// Inputs: ninguno (usa pipeline + bridge vivos).
+    ///
+    /// Returns: cantidad de `put` encolados.
+    #[cfg(feature = "simd")]
+    fn persist_available_shards(&self) -> Result<usize, Error> {
+        let pipe = self
+            .pipeline
+            .as_ref()
+            .ok_or(Error::InvalidOrchestratorState)?;
+        let bridge = self
+            .bridge
+            .as_ref()
+            .ok_or(Error::InvalidOrchestratorState)?;
+        let mut submitted = 0usize;
+        for index in 0..MAX_SHARDS {
+            let Ok(shard) = pipe.original_shard(index) else {
+                continue;
+            };
+            let key = shard_learn_key(index)?;
+            bridge.submit_record(&key, shard)?;
+            submitted += 1;
+        }
+        Ok(submitted)
+    }
+}
+
+/// Purpose: clave educativa para el data shard `index` (`learn/v1/shard/N`).
+///
+/// Inputs: `index` — `0..99`.
+///
+/// Returns: clave, o [`Error::EmptyRecordKey`] si el índice no cabe.
+#[cfg(feature = "simd")]
+fn shard_learn_key(index: usize) -> Result<Vec<u8>, Error> {
+    if index >= 100 {
+        return Err(Error::EmptyRecordKey);
+    }
+    let mut suffix = [0u8; 10];
+    let prefix = b"shard/";
+    suffix[..prefix.len()].copy_from_slice(prefix);
+    let len = if index >= 10 {
+        suffix[prefix.len()] = b'0' + (index / 10) as u8;
+        suffix[prefix.len() + 1] = b'0' + (index % 10) as u8;
+        prefix.len() + 2
+    } else {
+        suffix[prefix.len()] = b'0' + index as u8;
+        prefix.len() + 1
+    };
+    make_learn_key(&suffix[..len])
 }
 
 #[cfg(test)]
@@ -313,7 +397,6 @@ mod tests {
         orch.submit_record(&key, b"hola").expect("submit");
         orch.shutdown().expect("shutdown");
 
-        // Reabrir solo el motor para leer (orquestador ya Idle).
         let engine = nvme_state_db::Engine::open(dir.path()).expect("reopen");
         let got = engine.get(&key).expect("get");
         assert_eq!(got.as_bytes(), Some(b"hola".as_ref()));
