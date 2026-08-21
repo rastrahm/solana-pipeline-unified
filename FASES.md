@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 5 completa**. Siguiente: fase 6 (flush, recovery, backpressure).
+Estado del repositorio: **Fase 6 completa**. Siguiente: fase 7 (binario demo + README).
 
 ---
 
@@ -207,19 +207,23 @@ solana-pipeline-unified/
 
 ## Fase 6 — Flush, recuperación y backpressure con disco real
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` + `clippy -D warnings`).
 
-**Objetivo de aprendizaje:** `needs_flush` / `schedule_flush`, qué pasa si el disco es más lento que la red, y recovery al reabrir `Engine`.
+**Objetivo de aprendizaje:** `needs_flush` / `schedule_flush`, recovery al reabrir, cola llena tipada.
 
 **Alcance**
 
-- Política de flush en el orquestador (cuándo llamar).
-- Tests con directorio temporal.
-- Errores de backpressure / stall tipados.
+- `auto_schedule_flush` en config; `maybe_schedule_flush` tras encolar.
+- APIs: `needs_flush`, `schedule_flush`, `wait_flush`, `flush`.
+- `submit_record`: cola llena → intento de flush → `PipelineStall`.
+- `apply_backpressure` documenta la política.
+- Tests: `tests/flush_recovery.rs` (recovery, memtable full, saturación).
 
-**Fuera de alcance:** compactación de SST (sigue en nvme como fuera de alcance).
+**Fuera de alcance:** compactación SST.
 
-**Criterio de cierre:** reinicio del proceso (re-`open`) ve datos esperados; test de cola llena.
+**Criterio de cierre:** re-`open` ve datos; test de cola llena; clippy limpio.
+
+**Hecho:** política de flush + recovery + stall tipado.
 
 ---
 

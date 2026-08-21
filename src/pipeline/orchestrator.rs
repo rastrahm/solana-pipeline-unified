@@ -1,9 +1,8 @@
-//! Orchestrator: ciclo de vida del pipeline (fases 3–5).
+//! Orchestrator: ciclo de vida del pipeline (fases 3–6).
 //!
-//! Abre el [`nvme_state_db::Engine`], arranca el [`crate::pipeline::Bridge`]
-//! y, con feature `simd`, ingeriere shreds vía [`mini_solana_turbine::Pipeline`]
-//! en memoria (bytes sintéticos). El envío UDP de reenvío queda fuera de esta
-//! fase; el plan de forward sí se calcula y se reporta.
+//! Además del bridge y la ingestión, aplica una política de flush sobre
+//! [`nvme_state_db::Engine`] (`needs_flush` → `schedule_flush`) y traduce la
+//! saturación de la cola a [`Error::PipelineStall`].
 
 use crate::error::Error;
 use crate::pipeline::bridge::Bridge;
@@ -37,6 +36,8 @@ pub struct OrchestratorConfig {
     pub self_stake: Stake,
     /// Dirección anunciada para reenvío futuro; no se hace bind en fase 5.
     pub self_addr: SocketAddr,
+    /// Si es `true`, tras encolar se llama `schedule_flush` cuando `needs_flush`.
+    pub auto_schedule_flush: bool,
 }
 
 impl OrchestratorConfig {
@@ -46,7 +47,7 @@ impl OrchestratorConfig {
     /// - `data_dir`: path del motor de estado.
     /// - `self_addr`: addr lógica del nodo (p. ej. `127.0.0.1:0`).
     ///
-    /// Returns: config con cola por defecto e id/stake fijos de aprendizaje.
+    /// Returns: config con cola por defecto, auto-flush activo e id/stake fijos.
     pub fn local(data_dir: impl Into<PathBuf>, self_addr: SocketAddr) -> Self {
         Self {
             data_dir: data_dir.into(),
@@ -55,6 +56,7 @@ impl OrchestratorConfig {
             self_id: NodeId::new(1),
             self_stake: Stake::new(100),
             self_addr,
+            auto_schedule_flush: true,
         }
     }
 }
@@ -121,13 +123,101 @@ impl Orchestrator {
 
     /// Purpose: encola un registro hacia el bridge → `Engine::put`.
     ///
+    /// Si la cola está llena, intenta aliviar con `schedule_flush` (si aplica) y
+    /// devuelve [`Error::PipelineStall`] (backpressure tipado para el productor).
+    /// Tras un encolado OK, aplica la política de auto-flush.
+    ///
     /// Inputs: `key` / `value` (ver convención en `bridge`).
     ///
-    /// Returns: errores del bridge, o estado inválido si no está Running.
+    /// Returns: errores del bridge/flush, stall, o estado inválido si no corre.
     pub fn submit_record(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-        match &self.bridge {
-            Some(bridge) => bridge.submit_record(key, value),
-            None => Err(Error::InvalidOrchestratorState),
+        let bridge = self
+            .bridge
+            .as_ref()
+            .ok_or(Error::InvalidOrchestratorState)?;
+        match bridge.submit_record(key, value) {
+            Ok(()) => {
+                self.maybe_schedule_flush()?;
+                Ok(())
+            }
+            Err(Error::BridgeSaturated) => {
+                let _ = self.maybe_schedule_flush();
+                Err(Error::PipelineStall)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Purpose: ¿la MemTable activa superó el umbral de flush?
+    ///
+    /// Inputs: ninguno.
+    ///
+    /// Returns: `true` si conviene `schedule_flush`, o error de motor/estado.
+    pub fn needs_flush(&self) -> Result<bool, Error> {
+        let engine = self.engine.as_ref().ok_or(Error::InvalidOrchestratorState)?;
+        engine.needs_flush().map_err(|_| Error::PersistFailed)
+    }
+
+    /// Purpose: congela la MemTable activa y encola el volcado a SST (no espera).
+    ///
+    /// Inputs: ninguno.
+    ///
+    /// Returns: `Ok` si se encoló o no había nada que flushear; error de motor.
+    pub fn schedule_flush(&self) -> Result<(), Error> {
+        let engine = self.engine.as_ref().ok_or(Error::InvalidOrchestratorState)?;
+        engine.schedule_flush().map_err(|_| Error::PersistFailed)
+    }
+
+    /// Purpose: espera a que termine el flush en curso del motor.
+    ///
+    /// Inputs: ninguno.
+    ///
+    /// Returns: `Ok` cuando no hay flush in-flight; error de motor.
+    pub fn wait_flush(&self) -> Result<(), Error> {
+        let engine = self.engine.as_ref().ok_or(Error::InvalidOrchestratorState)?;
+        engine.wait_flush().map_err(|_| Error::PersistFailed)
+    }
+
+    /// Purpose: flush bloqueante hasta dejar MemTables vacías en disco.
+    ///
+    /// Inputs: ninguno.
+    ///
+    /// Returns: error de motor si el volcado falla.
+    pub fn flush(&self) -> Result<(), Error> {
+        let engine = self.engine.as_ref().ok_or(Error::InvalidOrchestratorState)?;
+        engine.flush().map_err(|_| Error::PersistFailed)
+    }
+
+    /// Purpose: si `auto_schedule_flush` y `needs_flush`, llama `schedule_flush`.
+    ///
+    /// Inputs: ninguno.
+    ///
+    /// Returns: `Ok` si no aplica o si el schedule terminó bien.
+    pub fn maybe_schedule_flush(&self) -> Result<(), Error> {
+        if !self.config.auto_schedule_flush {
+            return Ok(());
+        }
+        if self.needs_flush()? {
+            self.schedule_flush()?;
+        }
+        Ok(())
+    }
+
+    /// Purpose: política de backpressure (fase 6): cola llena + intento de flush
+    /// ⇒ [`Error::PipelineStall`].
+    ///
+    /// Inputs: `submit` — resultado crudo del bridge; `flush_attempted` — si ya
+    /// se llamó a aliviar presión.
+    ///
+    /// Returns: el mismo `Ok`, o stall tipado / el error original.
+    pub fn apply_backpressure(
+        submit: Result<(), Error>,
+        flush_attempted: bool,
+    ) -> Result<(), Error> {
+        match submit {
+            Ok(()) => Ok(()),
+            Err(Error::BridgeSaturated) if flush_attempted => Err(Error::PipelineStall),
+            Err(err) => Err(err),
         }
     }
 
@@ -244,6 +334,7 @@ impl Orchestrator {
                 .map_err(|_| Error::TurbineIngestFailed)?
         };
         let records_submitted = self.persist_available_shards()?;
+        self.maybe_schedule_flush()?;
         Ok(IngestOutcome {
             reconstructed: result.reconstructed(),
             forward_dest_count: result.forward().len(),
@@ -255,7 +346,7 @@ impl Orchestrator {
     ///
     /// Inputs: ninguno (usa pipeline + bridge vivos).
     ///
-    /// Returns: cantidad de `put` encolados.
+    /// Returns: cantidad de `put` encolados; [`Error::PipelineStall`] si la cola satura.
     #[cfg(feature = "simd")]
     fn persist_available_shards(&self) -> Result<usize, Error> {
         let pipe = self
@@ -272,8 +363,14 @@ impl Orchestrator {
                 continue;
             };
             let key = shard_learn_key(index)?;
-            bridge.submit_record(&key, shard)?;
-            submitted += 1;
+            match bridge.submit_record(&key, shard) {
+                Ok(()) => submitted += 1,
+                Err(Error::BridgeSaturated) => {
+                    let _ = self.maybe_schedule_flush();
+                    return Err(Error::PipelineStall);
+                }
+                Err(err) => return Err(err),
+            }
         }
         Ok(submitted)
     }
@@ -400,5 +497,21 @@ mod tests {
         let engine = nvme_state_db::Engine::open(dir.path()).expect("reopen");
         let got = engine.get(&key).expect("get");
         assert_eq!(got.as_bytes(), Some(b"hola".as_ref()));
+    }
+
+    /// Purpose: cola llena + flush intentado ⇒ `PipelineStall`.
+    /// Inputs: resultado sintético del bridge.
+    /// Returns: panics si la política no eleva el error.
+    #[test]
+    fn backpressure_elevates_saturated_to_stall() {
+        assert_eq!(
+            Orchestrator::apply_backpressure(Err(Error::BridgeSaturated), true),
+            Err(Error::PipelineStall)
+        );
+        assert_eq!(
+            Orchestrator::apply_backpressure(Err(Error::BridgeSaturated), false),
+            Err(Error::BridgeSaturated)
+        );
+        assert!(Orchestrator::apply_backpressure(Ok(()), true).is_ok());
     }
 }
