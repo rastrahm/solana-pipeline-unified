@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 3 completa**. Siguiente: fase 4 (bridge → `Engine::put`).
+Estado del repositorio: **Fase 4 completa**. Siguiente: fase 5 (cablear ingestión turbine → bridge).
 
 ---
 
@@ -165,19 +165,22 @@ solana-pipeline-unified/
 
 ## Fase 4 — Bridge: de resultado de ingest a `Engine::put`
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` + `clippy -D warnings`).
 
-**Objetivo de aprendizaje:** frontera orquestador ↔ storage. Mapear un **registro de aprendizaje** (clave/valor derivados del shred o shard reconstruido) hacia `put`, sin reimplementar WAL.
+**Objetivo de aprendizaje:** frontera orquestador ↔ storage. Mapear un registro de aprendizaje hacia `put`, sin reimplementar WAL.
 
 **Alcance**
 
-- `bridge.rs`: cola acotada (`crossbeam-channel`) + consumidor que llama `Engine::put`.
-- Política de saturación: error `thiserror` (no bloquear forever el productor de red).
-- Convención documentada de clave/valor (educativa; no es el encoding real de Solana AccountsDB).
+- Cola acotada (`crossbeam-channel`) + hilo `pipeline-bridge` que solo llama `Engine::put`.
+- `try_send` → `BridgeSaturated` si la cola está llena (no bloquea al productor).
+- Convención `learn/v1/` + sufijo (`make_learn_key`); no es AccountsDB real.
+- `Orchestrator::submit_record` + shutdown que drena la cola antes del flush.
 
-**Fuera de alcance:** ejecución de transacciones, repair, forks.
+**Fuera de alcance:** ejecución de transacciones, repair, forks, UDP.
 
-**Criterio de cierre:** test: N ítems encolados → visibles con `Engine::get` tras flush si la fase lo requiere.
+**Criterio de cierre:** N ítems encolados visibles con `get` tras drenar/flush; test de saturación.
+
+**Hecho:** `bridge.rs` real; deps `crossbeam-channel`; errores `EmptyRecordKey` / `BridgeSpawnFailed`.
 
 ---
 

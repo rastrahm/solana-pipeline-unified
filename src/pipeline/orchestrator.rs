@@ -1,19 +1,21 @@
-//! Orchestrator: ciclo de vida del pipeline (fase 3).
+//! Orchestrator: ciclo de vida del pipeline (fases 3–4).
 //!
-//! Abre el [`nvme_state_db::Engine`] (única persistencia) y, con feature `simd`,
-//! prepara un [`mini_solana_turbine::Pipeline`] en memoria. Todavía no hay UDP
-//! ni bridge con cola (fases 4–5).
+//! Abre el [`nvme_state_db::Engine`], arranca el [`crate::pipeline::Bridge`]
+//! (cola → `put`) y, con feature `simd`, prepara un
+//! [`mini_solana_turbine::Pipeline`] en memoria. UDP llega en fase 5.
 
 use crate::error::Error;
+use crate::pipeline::bridge::Bridge;
 use mini_solana_turbine::{Node, NodeId, Stake};
 use nvme_state_db::{Engine, EngineOptions};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[cfg(feature = "simd")]
 use mini_solana_turbine::{turbine::tree::build, Pipeline};
 
-/// Capacidad por defecto de la cola del bridge (se usa en fase 4).
+/// Capacidad por defecto de la cola del bridge.
 pub const DEFAULT_QUEUE_CAPACITY: usize = 128;
 
 /// Configuración de arranque del orquestador.
@@ -21,7 +23,7 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 128;
 pub struct OrchestratorConfig {
     /// Directorio de datos del [`Engine`] (WAL / SST).
     pub data_dir: PathBuf,
-    /// Capacidad de la cola acotada hacia el bridge (fase 4); se guarda ya.
+    /// Capacidad de la cola acotada hacia el bridge.
     pub queue_capacity: usize,
     /// Capacidad de MemTable en bytes; `None` = default del motor.
     pub mem_capacity_bytes: Option<usize>,
@@ -59,11 +61,12 @@ enum Phase {
     Running,
 }
 
-/// Coordina arranque y apagado de Engine (+ Pipeline si `simd`).
+/// Coordina Engine, Bridge y (si `simd`) Pipeline.
 pub struct Orchestrator {
     config: OrchestratorConfig,
     phase: Phase,
-    engine: Option<Engine>,
+    engine: Option<Arc<Engine>>,
+    bridge: Option<Bridge>,
     #[cfg(feature = "simd")]
     pipeline: Option<Pipeline>,
 }
@@ -79,6 +82,7 @@ impl Orchestrator {
             config,
             phase: Phase::Idle,
             engine: None,
+            bridge: None,
             #[cfg(feature = "simd")]
             pipeline: None,
         }
@@ -99,10 +103,10 @@ impl Orchestrator {
     ///
     /// Returns: referencia al [`Engine`], o `None` si Idle.
     pub fn engine(&self) -> Option<&Engine> {
-        self.engine.as_ref()
+        self.engine.as_deref()
     }
 
-    /// Purpose: capacidad de cola configurada (para el bridge en fase 4).
+    /// Purpose: capacidad de cola configurada.
     ///
     /// Inputs: ninguno.
     ///
@@ -111,14 +115,23 @@ impl Orchestrator {
         self.config.queue_capacity.max(1)
     }
 
-    /// Purpose: abre el motor y prepara Turbine en memoria.
+    /// Purpose: encola un registro hacia el bridge → `Engine::put`.
+    ///
+    /// Inputs: `key` / `value` (ver convención en `bridge`).
+    ///
+    /// Returns: errores del bridge, o estado inválido si no está Running.
+    pub fn submit_record(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
+        match &self.bridge {
+            Some(bridge) => bridge.submit_record(key, value),
+            None => Err(Error::InvalidOrchestratorState),
+        }
+    }
+
+    /// Purpose: abre el motor, arranca el bridge y prepara Turbine en memoria.
     ///
     /// Inputs: ninguno (usa la config del constructor).
     ///
-    /// Returns:
-    /// - `Ok(())` si pasó a Running.
-    /// - [`Error::InvalidOrchestratorState`] si ya estaba Running.
-    /// - [`Error::EngineOpenFailed`] / [`Error::TurbineSetupFailed`] si falla el setup.
+    /// Returns: `Ok` si pasó a Running; errores de open/spawn/Turbine si falla.
     pub fn start(&mut self) -> Result<(), Error> {
         if self.phase == Phase::Running {
             return Err(Error::InvalidOrchestratorState);
@@ -130,8 +143,11 @@ impl Orchestrator {
             },
             None => EngineOptions::default(),
         };
-        let engine = Engine::open_with(&self.config.data_dir, opts)
-            .map_err(|_| Error::EngineOpenFailed)?;
+        let engine = Arc::new(
+            Engine::open_with(&self.config.data_dir, opts).map_err(|_| Error::EngineOpenFailed)?,
+        );
+
+        let bridge = Bridge::start(Arc::clone(&engine), self.queue_capacity())?;
 
         #[cfg(feature = "simd")]
         let pipeline = {
@@ -145,8 +161,6 @@ impl Orchestrator {
                 .map_err(|_| Error::TurbineSetupFailed)?
         };
 
-        // Sin feature `simd` aún usamos Node para no dejar la config muerta
-        // y documentar el wiring; el árbol real llega con `simd`.
         #[cfg(not(feature = "simd"))]
         {
             let _ = Node::new(
@@ -157,6 +171,7 @@ impl Orchestrator {
         }
 
         self.engine = Some(engine);
+        self.bridge = Some(bridge);
         #[cfg(feature = "simd")]
         {
             self.pipeline = Some(pipeline);
@@ -165,17 +180,18 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Purpose: flush del motor (si aplica) y suelta recursos; el `Drop` de
-    /// [`Engine`] espera al hilo de flush interno.
+    /// Purpose: cierra el bridge (drena cola), flush del motor y suelta recursos.
     ///
     /// Inputs: ninguno.
     ///
-    /// Returns:
-    /// - `Ok(())` si Idle (no-op) o tras apagar Running.
-    /// - [`Error::PersistFailed`] si `flush` del motor falla.
+    /// Returns: `Ok` si Idle (no-op) o tras apagar; error de bridge/flush si falla.
     pub fn shutdown(&mut self) -> Result<(), Error> {
         if self.phase == Phase::Idle {
             return Ok(());
+        }
+
+        if let Some(bridge) = self.bridge.take() {
+            bridge.shutdown()?;
         }
 
         if let Some(engine) = self.engine.as_ref() {
@@ -207,6 +223,7 @@ impl Orchestrator {
 mod tests {
     use super::{Orchestrator, OrchestratorConfig};
     use crate::error::Error;
+    use crate::pipeline::bridge::make_learn_key;
     use std::net::SocketAddr;
 
     fn cfg(dir: &std::path::Path) -> OrchestratorConfig {
@@ -214,7 +231,7 @@ mod tests {
         OrchestratorConfig::local(dir, addr)
     }
 
-    /// Purpose: start → running → shutdown → idle, sin dejar el motor abierto.
+    /// Purpose: start → running → shutdown → idle.
     /// Inputs: tempdir.
     /// Returns: panics si el ciclo falla.
     #[test]
@@ -237,7 +254,7 @@ mod tests {
 
     /// Purpose: dos `start` seguidos no son válidos.
     /// Inputs: tempdir.
-    /// Returns: panics si el segundo start no es `InvalidOrchestratorState`.
+    /// Returns: panics si el segundo start no es inválido.
     #[test]
     fn double_start_is_invalid() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -257,7 +274,7 @@ mod tests {
         orch.shutdown().expect("shutdown idle");
     }
 
-    /// Purpose: tras apagar se puede volver a arrancar (reopen del Engine).
+    /// Purpose: tras apagar se puede volver a arrancar.
     /// Inputs: tempdir.
     /// Returns: panics si el segundo ciclo falla.
     #[test]
@@ -271,9 +288,9 @@ mod tests {
         orch.shutdown().expect("stop2");
     }
 
-    /// Purpose: la capacidad de cola queda guardada para la fase 4.
+    /// Purpose: la capacidad de cola queda guardada.
     /// Inputs: config con capacidad 8.
-    /// Returns: panics si `queue_capacity` no respeta el valor.
+    /// Returns: panics si no coincide.
     #[test]
     fn stores_queue_capacity() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -281,5 +298,24 @@ mod tests {
         c.queue_capacity = 8;
         let orch = Orchestrator::new(c);
         assert_eq!(orch.queue_capacity(), 8);
+    }
+
+    /// Purpose: submit vía orquestador llega al Engine.
+    /// Inputs: un registro `learn/v1/…`.
+    /// Returns: panics si `get` no ve el valor.
+    #[test]
+    fn submit_record_through_orchestrator() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut orch = Orchestrator::new(cfg(dir.path()));
+        orch.start().expect("start");
+
+        let key = make_learn_key(b"demo").expect("key");
+        orch.submit_record(&key, b"hola").expect("submit");
+        orch.shutdown().expect("shutdown");
+
+        // Reabrir solo el motor para leer (orquestador ya Idle).
+        let engine = nvme_state_db::Engine::open(dir.path()).expect("reopen");
+        let got = engine.get(&key).expect("get");
+        assert_eq!(got.as_bytes(), Some(b"hola".as_ref()));
     }
 }
