@@ -6,6 +6,13 @@ description = "Orquestador de aprendizaje: une mini-solana-turbine con nvme-stat
 license = "MIT OR Apache-2.0"
 publish = false
 
+[features]
+# Por defecto igual que turbine. Sin io_uring en el kernel/CI:
+#   cargo test --no-default-features --features simd
+default = ["uring", "simd"]
+uring = ["mini-solana-turbine/uring"]
+simd = ["mini-solana-turbine/simd"]
+
 [lib]
 name = "solana_pipeline_unified"
 path = "src/lib.rs"
@@ -17,3 +24,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 thiserror = "2"
+mini-solana-turbine = { path = "../mini-solana-turbine", default-features = false }
+nvme-state-db = { path = "../nvme-state-db" }
+
+[dev-dependencies]
+tempfile = "3"

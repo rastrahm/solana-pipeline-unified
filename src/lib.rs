@@ -1,8 +1,8 @@
 //! Orquestador de aprendizaje: cablea red/FEC (`mini-solana-turbine`) con
 //! persistencia (`nvme-state-db`).
 //!
-//! Fase 1: crate lib+bin, errores `thiserror` y stubs de `pipeline` sin I/O.
-//! Las deps path a los crates hermanos llegan en la fase 2.
+//! Fase 2: deps `path` a los crates hermanos y tests iniciales de tipos públicos.
+//! El cableado real (orchestrator / bridge) llega en fases posteriores.
 
 #![deny(missing_docs)]
 

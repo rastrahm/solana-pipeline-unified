@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 1 completa**. Siguiente: fase 2 (deps path a turbine/nvme).
+Estado del repositorio: **Fase 2 completa**. Siguiente: fase 3 (ciclo de vida del orchestrator).
 
 ---
 
@@ -112,7 +112,7 @@ solana-pipeline-unified/
 - Aún **sin** path deps a turbine/nvme (eso es fase 2).
 - `src/lib.rs`, `src/main.rs` (main mínimo), `src/error.rs`.
 - Stubs: `src/pipeline/{mod,bridge,orchestrator}.rs` con tipos/funciones documentadas que devuelven `Error::Unimplemented` (sin `todo!` en tests).
-- Test de humo: el crate compila; `Error` implementa `std::error::Error`.
+- Test inicial: el crate compila; `Error` implementa `std::error::Error`.
 
 **Fuera de alcance:** UDP, FEC, `Engine`, colas reales, I/O.
 
@@ -122,21 +122,23 @@ solana-pipeline-unified/
 
 ---
 
-## Fase 2 — Dependencias path y humo de integración de tipos
+## Fase 2 — Dependencias path y tests iniciales de tipos
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` verde con features default; `--no-default-features --features simd` también; `clippy -D warnings` limpio).
 
 **Objetivo de aprendizaje:** enlazar crates hermanos por `path`, features de turbine (`uring`/`simd`), importar solo API pública.
 
 **Alcance**
 
 - `Cargo.toml`: `mini-solana-turbine` y `nvme-state-db` vía `path = "..."`.
-- Tests que construyen/tocan símbolos públicos mínimos (p. ej. tipos reexportados o `EngineOptions` / `Error` de cada lado) sin pipeline completo.
-- Ajustar features si el entorno no tiene `io_uring`.
+- Features del unificado: `default = ["uring", "simd"]` reenviadas a turbine; sin io_uring: `cargo test --no-default-features --features simd`.
+- `tests/deps_iniciales.rs`: tipos públicos, `Engine::open` en tempdir, árbol Turbine, `Pipeline` si `simd`, enlace de `UdpIngress` si `uring` (sin bind).
 
 **Fuera de alcance:** loop de red, `put` de producción, bridge con backpressure.
 
 **Criterio de cierre:** `cargo test` enlaza ambos crates; clippy limpio.
+
+**Hecho:** deps path + features; tests iniciales de integración de tipos; `tempfile` como dev-dep.
 
 ---
 
