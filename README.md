@@ -98,6 +98,11 @@ Detalle de fases: [`FASES.md`](FASES.md). Reglas del agente: [`.cursorrules`](.c
 solana-pipeline-unified/
 ├── FASES.md
 ├── README.md
+├── doc/
+│   ├── README.md
+│   ├── flujograma.md
+│   ├── diagrama_de_clases.md
+│   └── diagrama_de_flujo.md
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs              # CLI demo
