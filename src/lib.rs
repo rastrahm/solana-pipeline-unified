@@ -1,8 +1,8 @@
 //! Orquestador de aprendizaje: cablea red/FEC (`mini-solana-turbine`) con
 //! persistencia (`nvme-state-db`).
 //!
-//! Fase 5: `ingest_bytes` (Turbine en memoria) → bridge → `Engine::put`.
-//! El envío UDP de reenvío no forma parte de esta fase.
+//! Fase 6: flush (`needs_flush` / `schedule_flush`), recovery al reabrir y
+//! backpressure (`BridgeSaturated` → `PipelineStall`).
 
 #![deny(missing_docs)]
 
