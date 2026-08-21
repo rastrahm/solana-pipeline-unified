@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 6 completa**. Siguiente: fase 7 (binario demo + README).
+Estado del repositorio: **Fase 7 completa**. Siguiente: fase 8 (bench e2e criterion).
 
 ---
 
@@ -229,18 +229,21 @@ solana-pipeline-unified/
 
 ## Fase 7 — Binario demo y documentación de recorrido
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` + `clippy -D warnings`; demo `--demo` verificada).
 
-**Objetivo de aprendizaje:** un `main` que se pueda correr en laboratorio y un README corto “cómo seguir el flujo”.
+**Objetivo de aprendizaje:** CLI de laboratorio y README para seguir el flujo.
 
 **Alcance**
 
-- CLI mínima (dirs, bind addr, flags).
-- README de aprendizaje (pasos, limitaciones vs Solana real).
+- `src/main.rs`: `--data-dir`, `--addr`, `--queue-cap`, `--demo`, `--help`.
+- `--demo`: shreds sintéticos → `ingest_bytes` → shutdown → `get` de `shard/0` y `shard/1` en disco.
+- `README.md`: mapa del flujo, inicio rápido, límites vs Solana.
 
-**Fuera de alcance:** cluster multi-nodo de producción.
+**Fuera de alcance:** cluster multi-nodo.
 
-**Criterio de cierre:** demo documentada; `cargo clippy` limpio.
+**Criterio de cierre:** demo documentada; clippy limpio.
+
+**Hecho:** CLI + README; verificación post-shutdown de ambos shards.
 
 ---
 
