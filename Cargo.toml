@@ -29,8 +29,14 @@ mini-solana-turbine = { path = "../mini-solana-turbine", default-features = fals
 nvme-state-db = { path = "../nvme-state-db" }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
 
 [[test]]
 name = "ingest_to_bridge"
+required-features = ["simd"]
+
+[[bench]]
+name = "e2e_throughput"
+harness = false
 required-features = ["simd"]
