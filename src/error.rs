@@ -21,9 +21,17 @@ pub enum Error {
     #[error("cola del bridge saturada")]
     BridgeSaturated,
 
-    /// El motor de estado rechazó o no pudo completar una escritura (fase 4+).
+    /// No se pudo crear el hilo consumidor del bridge.
+    #[error("no se pudo crear el hilo del bridge")]
+    BridgeSpawnFailed,
+
+    /// Fallo al persistir en el motor de estado (fase 4+).
     #[error("fallo al persistir en el motor de estado")]
     PersistFailed,
+
+    /// Clave de registro vacía (no se encola).
+    #[error("clave de registro vacía")]
+    EmptyRecordKey,
 
     /// El orquestador no está en el estado esperado para la operación (fase 3+).
     #[error("estado del orquestador inválido para esta operación")]
