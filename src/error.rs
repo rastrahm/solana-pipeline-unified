@@ -45,6 +45,10 @@ pub enum Error {
     #[error("no se pudo preparar el pipeline Turbine")]
     TurbineSetupFailed,
 
+    /// Falló el parseo / FEC al ingerir un shred (fase 5+).
+    #[error("falló la ingestión Turbine")]
+    TurbineIngestFailed,
+
     /// El pipeline se detuvo por backpressure o stall prolongado (fase 6+).
     #[error("pipeline en stall / backpressure")]
     PipelineStall,

@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 4 completa**. Siguiente: fase 5 (cablear ingestión turbine → bridge).
+Estado del repositorio: **Fase 5 completa**. Siguiente: fase 6 (flush, recovery, backpressure).
 
 ---
 
@@ -186,18 +186,22 @@ solana-pipeline-unified/
 
 ## Fase 5 — Cablear ingestión (turbine) al bridge
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` + `clippy -D warnings`).
 
-**Objetivo de aprendizaje:** un tramo TVU-like: recv/ingest → (opcional forward) → bridge → nvme.
+**Objetivo de aprendizaje:** tramo TVU-like en laboratorio: ingest → (plan de forward) → bridge → nvme.
 
 **Alcance**
 
-- Usar `UdpIngress` / `Pipeline` / `slot_queue` según features.
-- Un camino feliz en test (loopback o bytes sintéticos vía `ingest_bytes` si UDP complica el CI).
+- `Orchestrator::ingest_bytes` (feature `simd`): llama a `Pipeline::ingest_bytes`, encola shards presentes como `learn/v1/shard/N`.
+- `IngestOutcome` (reconstructed, forward_dest_count, records_submitted).
+- Test de integración `tests/ingest_to_bridge.rs`: data + code → reconstrucción → ambos shards en el Engine.
+- Sin bind/send UDP (el plan de forward se reporta, no se envía).
 
-**Fuera de alcance:** gossip, leader TPU completo, Blockstore.
+**Fuera de alcance:** gossip, leader TPU, Blockstore, reenvío real.
 
-**Criterio de cierre:** test de integración documentado; métricas mínimas opcionales.
+**Criterio de cierre:** integración documentada; métricas Turbine comprobadas en el test.
+
+**Hecho:** cable ingest→bridge; error `TurbineIngestFailed`.
 
 ---
 
