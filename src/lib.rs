@@ -1,8 +1,8 @@
 //! Orquestador de aprendizaje: cablea red/FEC (`mini-solana-turbine`) con
 //! persistencia (`nvme-state-db`).
 //!
-//! Fase 2: deps `path` a los crates hermanos y tests iniciales de tipos públicos.
-//! El cableado real (orchestrator / bridge) llega en fases posteriores.
+//! Fase 3: ciclo de vida del [`Orchestrator`] (abre `Engine`, prepara Turbine
+//! en memoria). El bridge con cola llega en la fase 4.
 
 #![deny(missing_docs)]
 
@@ -10,36 +10,30 @@ pub mod error;
 pub mod pipeline;
 
 pub use error::Error;
-pub use pipeline::{Bridge, Orchestrator};
+pub use pipeline::{Bridge, Orchestrator, OrchestratorConfig, DEFAULT_QUEUE_CAPACITY};
 
 #[cfg(test)]
 mod tests {
-    use super::{Bridge, Error, Orchestrator};
+    use super::{Bridge, Error, Orchestrator, OrchestratorConfig};
+    use std::net::SocketAddr;
 
-    /// Purpose: comprueba que la API pública reexportada compila y tipa.
-    /// Inputs: ninguno.
-    /// Returns: panics si los stubs no devuelven `Unimplemented`.
+    /// Purpose: el bridge sigue siendo stub; el orchestrator ya arranca de verdad.
+    /// Inputs: tempdir.
+    /// Returns: panics si el bridge no es stub o el ciclo de vida falla.
     #[test]
-    fn public_api_stubs_return_unimplemented() {
+    fn bridge_still_stub_orchestrator_runs() {
         let bridge = Bridge::new();
         assert!(matches!(
             bridge.submit_record(b"k", b"v"),
             Err(Error::Unimplemented { module: "bridge" })
         ));
 
-        let orch = Orchestrator::new();
-        assert!(matches!(
-            orch.start(),
-            Err(Error::Unimplemented {
-                module: "orchestrator"
-            })
-        ));
-        assert!(matches!(
-            orch.shutdown(),
-            Err(Error::Unimplemented {
-                module: "orchestrator"
-            })
-        ));
+        let dir = tempfile::tempdir().expect("tempdir");
+        let addr: SocketAddr = "127.0.0.1:0".parse().expect("addr");
+        let mut orch = Orchestrator::new(OrchestratorConfig::local(dir.path(), addr));
+        orch.start().expect("start");
+        assert!(orch.is_running());
+        orch.shutdown().expect("shutdown");
     }
 
     /// Purpose: `Error` es usable como `std::error::Error`.
@@ -47,7 +41,7 @@ mod tests {
     /// Returns: panics si no se puede tratar como trait object de error.
     #[test]
     fn error_implements_std_error() {
-        let err: Error = Error::Unimplemented { module: "bridge" };
+        let err: Error = Error::EngineOpenFailed;
         let _: &dyn std::error::Error = &err;
         assert!(!err.to_string().is_empty());
     }

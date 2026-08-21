@@ -1,10 +1,10 @@
-//! Subsistema de orquestación (stubs en fase 1).
+//! Subsistema de orquestación.
 //!
-//! - [`bridge`]: entrega de registros hacia el motor de estado (futuro).
-//! - [`orchestrator`]: arranque y apagado del pipeline (futuro).
+//! - [`bridge`]: entrega hacia el motor (stub hasta fase 4).
+//! - [`orchestrator`]: arranque y apagado (fase 3).
 
 pub mod bridge;
 pub mod orchestrator;
 
 pub use bridge::Bridge;
-pub use orchestrator::Orchestrator;
+pub use orchestrator::{Orchestrator, OrchestratorConfig, DEFAULT_QUEUE_CAPACITY};

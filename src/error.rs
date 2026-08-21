@@ -29,6 +29,14 @@ pub enum Error {
     #[error("estado del orquestador inválido para esta operación")]
     InvalidOrchestratorState,
 
+    /// No se pudo abrir o inicializar `nvme-state-db::Engine` (fase 3+).
+    #[error("no se pudo abrir el motor de estado")]
+    EngineOpenFailed,
+
+    /// Falló la preparación en memoria del pipeline Turbine (fase 3+).
+    #[error("no se pudo preparar el pipeline Turbine")]
+    TurbineSetupFailed,
+
     /// El pipeline se detuvo por backpressure o stall prolongado (fase 6+).
     #[error("pipeline en stall / backpressure")]
     PipelineStall,

@@ -4,7 +4,7 @@ Proyecto de **aprendizaje**: orquestador que une `mini-solana-turbine` (red + sh
 
 Cada fase requiere autorización explícita (`autoriza fase N`) antes de empezar. Al cerrar una fase se explica qué se hizo, qué se aprendió y se pide permiso para la siguiente.
 
-Estado del repositorio: **Fase 2 completa**. Siguiente: fase 3 (ciclo de vida del orchestrator).
+Estado del repositorio: **Fase 3 completa**. Siguiente: fase 4 (bridge → `Engine::put`).
 
 ---
 
@@ -144,18 +144,22 @@ solana-pipeline-unified/
 
 ## Fase 3 — Orchestrator: ciclo de vida
 
-**Estado:** pendiente.
+**Estado:** completa (`cargo test` + `clippy -D warnings`).
 
-**Objetivo de aprendizaje:** arrancar y apagar ordenadamente lo que ya existe en los otros crates (p. ej. abrir `Engine`, preparar estructuras de turbine).
+**Objetivo de aprendizaje:** arrancar y apagar ordenadamente lo que ya existe en los otros crates (abrir `Engine`, preparar Turbine en memoria).
 
 **Alcance**
 
-- `orchestrator.rs`: configuración (rutas de datos, capacidad de colas), `start` / `shutdown`.
-- Sin ingestión UDP completa todavía si la fase 4/5 la cubren; puede ser wiring en memoria.
+- `OrchestratorConfig` (data_dir, queue_capacity, MemTable opcional, id/stake/addr locales).
+- `start` / `shutdown` / `is_running` / `engine` (+ `pipeline` si `simd`).
+- `shutdown` hace `flush` y suelta el `Engine` (su `Drop` espera al hilo de flush).
+- Sin UDP ni bridge con cola.
 
-**Fuera de alcance:** benchmark e2e, persistencia de shreds crudos como Blockstore.
+**Fuera de alcance:** benchmark e2e, Blockstore de shreds.
 
-**Criterio de cierre:** tests de arranque/parada; sin fugas obvias de hilos del flush de nvme al dropear.
+**Criterio de cierre:** tests de arranque/parada / doble start / restart; clippy limpio.
+
+**Hecho:** `orchestrator.rs` real; errores `EngineOpenFailed` / `TurbineSetupFailed`; bridge sigue stub.
 
 ---
 
