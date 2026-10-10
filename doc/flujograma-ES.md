@@ -1,5 +1,7 @@
 # Flujograma del sistema
 
+[English](flujograma-EN.md) · **Español** · [Índice](README.md)
+
 Vista de **alto nivel**: cómo se conectan los tres crates del stack de aprendizaje.
 
 ```mermaid

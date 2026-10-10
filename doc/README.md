@@ -1,11 +1,10 @@
-# Documentación visual
+# Visual documentation / Documentación visual
 
-Diagramas del orquestador `solana-pipeline-unified` (Mermaid; se ven en GitLab/GitHub/VS Code).
+| | English | Español |
+| --- | --- | --- |
+| Docs index / Índice | [README-EN.md](README-EN.md) | [README-ES.md](README-ES.md) |
+| System flowchart / Flujograma | [flujograma-EN.md](flujograma-EN.md) | [flujograma-ES.md](flujograma-ES.md) |
+| Class diagram / Diagrama de clases | [diagrama_de_clases-EN.md](diagrama_de_clases-EN.md) | [diagrama_de_clases-ES.md](diagrama_de_clases-ES.md) |
+| Control flow / Diagrama de flujo | [diagrama_de_flujo-EN.md](diagrama_de_flujo-EN.md) | [diagrama_de_flujo-ES.md](diagrama_de_flujo-ES.md) |
 
-| Archivo | Contenido |
-| --- | --- |
-| [flujograma.md](flujograma.md) | Vista de sistema: turbine ↔ unificado ↔ nvme |
-| [diagrama_de_clases.md](diagrama_de_clases.md) | Tipos públicos y relaciones |
-| [diagrama_de_flujo.md](diagrama_de_flujo.md) | Control: start, ingest, bridge, demo CLI |
-
-Contexto narrativo: [../README.md](../README.md) · fases: [../FASES.md](../FASES.md).
+Back to project index / Volver al índice del proyecto: [../README.md](../README.md).

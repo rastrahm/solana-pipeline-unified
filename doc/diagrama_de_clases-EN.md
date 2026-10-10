@@ -1,6 +1,8 @@
-# Diagrama de clases
+# Class diagram
 
-Tipos públicos principales de `solana-pipeline-unified` y su relación con los crates hermanos (solo lo que el orquestador usa).
+**English** · [Español](diagrama_de_clases-ES.md) · [Index](README.md)
+
+Main public types of `solana-pipeline-unified` and how they relate to the sibling crates (only what the orchestrator uses).
 
 ```mermaid
 classDiagram
@@ -92,21 +94,21 @@ classDiagram
     +original_shard(index) Result
   }
 
-  OrchestratorConfig --> Orchestrator : configura
-  Orchestrator --> Bridge : posee
+  OrchestratorConfig --> Orchestrator : configures
+  Orchestrator --> Bridge : owns
   Orchestrator --> Engine : Arc
-  Orchestrator --> Pipeline : opcional simd
-  Orchestrator ..> IngestOutcome : produce
-  Orchestrator ..> Error : propaga
-  Bridge --> BridgeSender : productor
-  Bridge --> BridgeReceiver : hilo consumidor
-  BridgeSender ..> StateRecord : encola
+  Orchestrator --> Pipeline : optional simd
+  Orchestrator ..> IngestOutcome : produces
+  Orchestrator ..> Error : propagates
+  Bridge --> BridgeSender : producer
+  Bridge --> BridgeReceiver : consumer thread
+  BridgeSender ..> StateRecord : enqueues
   BridgeReceiver --> Engine : put
-  Bridge ..> Error : propaga
+  Bridge ..> Error : propagates
 ```
 
-## Notas
+## Notes
 
-- `Pipeline` solo existe con feature `simd`.
-- El disco (WAL/MemTable/SST) vive **dentro** de `Engine`; el orquestador no lo reimplementa.
-- `make_learn_key` / `LEARN_KEY_PREFIX` (`learn/v1/`) son helpers de clave educativa, no tipos de clase.
+- `Pipeline` only exists with the `simd` feature.
+- Disk (WAL/MemTable/SST) lives **inside** `Engine`; the orchestrator does not reimplement it.
+- `make_learn_key` / `LEARN_KEY_PREFIX` (`learn/v1/`) are educational key helpers, not class types.
