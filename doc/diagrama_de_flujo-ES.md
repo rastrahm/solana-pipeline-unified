@@ -1,5 +1,7 @@
 # Diagrama de flujo
 
+[English](diagrama_de_flujo-EN.md) · **Español** · [Índice](README.md)
+
 Flujo de **control** del orquestador: desde el arranque hasta persistir shards y apagar.
 
 ## 1. Ciclo de vida (`start` / `shutdown`)

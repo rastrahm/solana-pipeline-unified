@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>solana-pipeline-unified — Rolando Strahm</title>
+  <meta name="description" content="Orquestador de aprendizaje: une mini-solana-turbine (red/FEC) con nvme-state-db (persistencia). Rust · colas acotadas · Engine KV · fases 0–8."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:        #020c14;
+      --bg2:       #040f1a;
+      --cyan:      #00f5d4;
+      --green:     #39ff14;
+      --yellow:    #f5e642;
+      --purple:    #bf5af2;
+      --pink:      #ff2d78;
+      --white:     #e0f0ff;
+      --muted:     #4a7a9b;
+      --border:    rgba(0,245,212,.12);
+      --ff-title:  'Orbitron', monospace;
+      --ff-mono:   'Share Tech Mono', monospace;
+      --ff-body:   'Inter', sans-serif;
+      --glow-c:    0 0 8px var(--cyan), 0 0 24px rgba(0,245,212,.3);
+      --glow-g:    0 0 8px var(--green), 0 0 24px rgba(57,255,20,.3);
+      --trans:     .3s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: var(--ff-body);
+      background: var(--bg);
+      color: var(--white);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { text-decoration: none; color: inherit; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 2px; }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,.04) 0px,
+        rgba(0,0,0,.04) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%);
+      pointer-events: none;
+      z-index: 9998;
+    }
+
+    #nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      height: 64px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--trans);
+    }
+    #nav.scrolled { background: rgba(2,12,20,.88); backdrop-filter: blur(16px); }
+
+    .nav-logo {
+      font-family: var(--ff-title);
+      font-size: .85rem;
+      font-weight: 700;
+      letter-spacing: .18em;
+      color: var(--cyan);
+      text-shadow: var(--glow-c);
+    }
+    .nav-logo span { color: var(--white); opacity: .5; }
+
+    .nav-links { display: flex; gap: 28px; list-style: none; }
+    .nav-links a {
+      font-family: var(--ff-mono);
+      font-size: .72rem;
+      letter-spacing: .1em;
+      color: var(--muted);
+      transition: color var(--trans);
+      text-transform: uppercase;
+    }
+    .nav-links a:hover { color: var(--cyan); text-shadow: var(--glow-c); }
+
+    .nav-right { display: flex; align-items: center; gap: 20px; }
+    .nav-close {
+      font-family: var(--ff-mono);
+      font-size: .72rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 2px;
+      transition: color var(--trans), border-color var(--trans), background var(--trans);
+    }
+    .nav-close:hover {
+      color: var(--cyan);
+      border-color: rgba(0,245,212,.35);
+      background: rgba(0,245,212,.08);
+      text-shadow: var(--glow-c);
+    }
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--ff-mono);
+      font-size: .72rem;
+    }
+    .lang-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      transition: color var(--trans), border-color var(--trans), background var(--trans);
+    }
+    .lang-btn:hover { color: var(--cyan); }
+    .lang-btn.active {
+      color: var(--cyan);
+      border-color: rgba(0,245,212,.35);
+      background: rgba(0,245,212,.08);
+      text-shadow: var(--glow-c);
+    }
+    .lang-sep { color: var(--muted); opacity: .4; }
+
+    #hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      text-align: center;
+      padding: 96px 20px 80px;
+    }
+
+    .grid-scene {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 56%;
+      perspective: 400px;
+      perspective-origin: 50% 0%;
+    }
+    .grid-floor {
+      position: absolute;
+      inset: 0;
+      transform: rotateX(72deg);
+      transform-origin: top center;
+      background-image:
+        linear-gradient(rgba(0,245,212,.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,212,.18) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridScroll 8s linear infinite;
+    }
+    @keyframes gridScroll {
+      from { background-position: 0 0; }
+      to   { background-position: 0 60px; }
+    }
+    .grid-scene::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, var(--bg) 0%, transparent 30%, transparent 70%, var(--bg) 100%);
+      z-index: 1;
+    }
+    .horizon {
+      position: absolute;
+      bottom: 56%;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
+      box-shadow: 0 0 24px var(--cyan), 0 0 60px rgba(0,245,212,.4);
+      z-index: 2;
+    }
+
+    .hero-content { position: relative; z-index: 10; max-width: 900px; }
+    .hero-tag {
+      display: inline-block;
+      font-family: var(--ff-mono);
+      font-size: .72rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      border: 1px solid rgba(0,245,212,.3);
+      padding: 6px 18px;
+      border-radius: 2px;
+      margin-bottom: 28px;
+      animation: fadeUp .8s .1s both;
+    }
+    .hero-name {
+      font-family: var(--ff-title);
+      font-size: clamp(1.5rem, 4.2vw, 2.9rem);
+      font-weight: 900;
+      letter-spacing: .05em;
+      line-height: 1.15;
+      text-transform: uppercase;
+      color: var(--white);
+      animation: fadeUp .9s .25s both;
+    }
+    .hero-role {
+      font-family: var(--ff-mono);
+      font-size: clamp(.8rem, 1.6vw, 1rem);
+      letter-spacing: .16em;
+      color: var(--cyan);
+      text-shadow: var(--glow-c);
+      margin-top: 16px;
+      text-transform: uppercase;
+      animation: fadeUp .9s .4s both;
+    }
+    .hero-sub {
+      font-size: clamp(.85rem, 1.4vw, 0.98rem);
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 20px auto 0;
+      animation: fadeUp .9s .55s both;
+    }
+    .hero-ctas {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 36px;
+      animation: fadeUp .9s .7s both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .btn-neon {
+      font-family: var(--ff-mono);
+      font-size: .78rem;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 12px 28px;
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      background: rgba(0,245,212,.06);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: background var(--trans), box-shadow var(--trans);
+    }
+    .btn-neon:hover {
+      background: rgba(0,245,212,.14);
+      box-shadow: var(--glow-c);
+    }
+    .btn-neon-solid { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+    .btn-neon-solid:hover { background: #00dbbf; box-shadow: var(--glow-c); color: var(--bg); }
+
+    .section { padding: 100px 0; position: relative; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+
+    .sec-eyebrow {
+      font-family: var(--ff-mono);
+      font-size: .72rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .sec-title {
+      font-family: var(--ff-title);
+      font-size: clamp(1.6rem, 3.2vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+    .neon-line {
+      height: 1px;
+      background: linear-gradient(90deg, var(--cyan), transparent);
+      margin: 18px 0 48px;
+      width: 160px;
+    }
+    .sec-lead {
+      font-size: .95rem;
+      color: rgba(224,240,255,.75);
+      line-height: 1.8;
+      max-width: 760px;
+      margin-bottom: 40px;
+    }
+    .sec-lead strong { color: var(--cyan); font-weight: 500; }
+    .sec-lead code {
+      font-family: var(--ff-mono);
+      font-size: .85em;
+      color: var(--green);
+    }
+
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      background: rgba(0,245,212,.06);
+      border: 1px solid var(--border);
+    }
+    .pillar {
+      background: var(--bg2);
+      padding: 36px 30px;
+      position: relative;
+    }
+    .pillar--cyan { --pc: var(--cyan); }
+    .pillar--green { --pc: var(--green); }
+    .pillar--yellow { --pc: var(--yellow); }
+    .pillar-num {
+      font-family: var(--ff-mono);
+      font-size: .68rem;
+      letter-spacing: .18em;
+      color: var(--pc);
+      opacity: .85;
+      margin-bottom: 12px;
+    }
+    .pillar-title {
+      font-family: var(--ff-title);
+      font-size: 1.15rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--pc);
+      margin-bottom: 14px;
+    }
+    .pillar-desc {
+      font-size: .86rem;
+      color: var(--muted);
+      line-height: 1.75;
+      margin-bottom: 18px;
+    }
+    .pillar-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pillar-list li {
+      font-family: var(--ff-mono);
+      font-size: .74rem;
+      color: rgba(224,240,255,.8);
+      padding-left: 14px;
+      position: relative;
+    }
+    .pillar-list li::before {
+      content: '›';
+      position: absolute;
+      left: 0;
+      color: var(--pc);
+    }
+
+    #stack {
+      padding: 40px 0;
+      overflow: hidden;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .marquee-wrapper { display: flex; }
+    .marquee-track { display: flex; animation: marquee 28s linear infinite; flex-shrink: 0; }
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    .m-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 24px; border-right: 1px solid var(--border);
+      font-family: var(--ff-mono); font-size: .82rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    .m-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+    #process {
+      background: linear-gradient(180deg, var(--bg) 0%, #030e18 100%);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .process-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: start;
+    }
+    .about-terminal {
+      background: #030e18;
+      border: 1px solid rgba(0,245,212,.15);
+      border-radius: 4px;
+      overflow: hidden;
+      font-family: var(--ff-mono);
+      font-size: .8rem;
+    }
+    .term-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(0,245,212,.05);
+      border-bottom: 1px solid rgba(0,245,212,.1);
+    }
+    .term-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .term-label { font-size: .65rem; color: var(--muted); margin-left: 4px; }
+    .term-body { padding: 20px 18px; line-height: 1.9; }
+    .term-prompt { color: var(--cyan); }
+    .term-ok { color: var(--green); }
+    .term-dim { color: var(--muted); }
+
+    .phase-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .phase-row {
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      background: rgba(4,15,26,.6);
+      font-family: var(--ff-mono);
+      font-size: .78rem;
+    }
+    .phase-id { color: var(--cyan); }
+    .phase-name { color: rgba(224,240,255,.85); }
+    .phase-status { color: var(--green); font-size: .7rem; letter-spacing: .08em; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 40px;
+    }
+    .a-stat {
+      border: 1px solid var(--border);
+      padding: 20px 12px;
+      text-align: center;
+      background: rgba(4,15,26,.6);
+    }
+    .a-stat-num {
+      font-family: var(--ff-title);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: var(--glow-c);
+    }
+    .a-stat-label {
+      font-family: var(--ff-mono);
+      font-size: .62rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 8px;
+      letter-spacing: .06em;
+    }
+
+    .campaigns-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 2px;
+      background: rgba(0,245,212,.06);
+      border: 1px solid var(--border);
+    }
+    .camp {
+      background: var(--bg2);
+      padding: 24px 18px;
+      min-height: 160px;
+    }
+    .camp-id {
+      font-family: var(--ff-mono);
+      font-size: .68rem;
+      color: var(--green);
+      letter-spacing: .12em;
+      margin-bottom: 10px;
+    }
+    .camp-title {
+      font-family: var(--ff-title);
+      font-size: .85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 10px;
+      color: var(--white);
+    }
+    .camp-desc {
+      font-size: .78rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+      font-size: .84rem;
+    }
+    .detail-table th,
+    .detail-table td {
+      padding: 14px 18px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .detail-table th {
+      font-family: var(--ff-mono);
+      font-size: .68rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      background: rgba(0,245,212,.05);
+    }
+    .detail-table td:first-child {
+      font-family: var(--ff-mono);
+      font-size: .78rem;
+      color: var(--green);
+      width: 36%;
+    }
+    .detail-table td:last-child {
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .detail-table tr:last-child td { border-bottom: none; }
+
+    .bench-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+    .bench-stat {
+      border: 1px solid var(--border);
+      padding: 24px 16px;
+      text-align: center;
+      background: rgba(4,15,26,.7);
+    }
+    .bench-stat-num {
+      font-family: var(--ff-title);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: var(--glow-c);
+    }
+    .bench-stat-label {
+      font-family: var(--ff-mono);
+      font-size: .65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 8px;
+      letter-spacing: .08em;
+    }
+
+    .goals-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      background: rgba(0,245,212,.06);
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .goal-card {
+      background: var(--bg2);
+      padding: 28px 24px;
+    }
+    .goal-badge {
+      display: inline-block;
+      font-family: var(--ff-mono);
+      font-size: .62rem;
+      letter-spacing: .1em;
+      padding: 3px 8px;
+      border: 1px solid rgba(0,245,212,.35);
+      color: var(--cyan);
+      margin-bottom: 12px;
+    }
+    .goal-badge--ok {
+      border-color: rgba(57,255,20,.35);
+      color: var(--green);
+    }
+    .goal-title {
+      font-family: var(--ff-title);
+      font-size: .95rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 10px;
+    }
+    .goal-desc {
+      font-size: .82rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    #decisions { border-top: 1px solid var(--border); }
+    #benches {
+      background: linear-gradient(180deg, #030e18 0%, var(--bg) 100%);
+      border-top: 1px solid var(--border);
+    }
+    #pipeline { border-top: 1px solid var(--border); }
+
+    #repos { background: var(--bg2); border-top: 1px solid var(--border); }
+    .repo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 8px;
+    }
+    .repo-card {
+      border: 1px solid var(--border);
+      padding: 32px 28px;
+      background: rgba(2,12,20,.5);
+      transition: border-color var(--trans), box-shadow var(--trans);
+    }
+    .repo-card:hover {
+      border-color: rgba(0,245,212,.35);
+      box-shadow: var(--glow-c);
+    }
+    .repo-label {
+      font-family: var(--ff-mono);
+      font-size: .68rem;
+      letter-spacing: .16em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .repo-name {
+      font-family: var(--ff-title);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 12px;
+    }
+    .repo-url {
+      font-family: var(--ff-mono);
+      font-size: .8rem;
+      color: rgba(224,240,255,.7);
+      word-break: break-all;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 40px;
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--ff-mono);
+      font-size: .68rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    @media (max-width: 1000px) {
+      .pillars-grid, .campaigns-grid, .goals-grid { grid-template-columns: 1fr; }
+      .stats, .bench-stats { grid-template-columns: repeat(2, 1fr); }
+      .process-grid, .repo-grid { grid-template-columns: 1fr; gap: 40px; }
+      .detail-table td:first-child { width: auto; display: block; padding-bottom: 4px; }
+      .detail-table td:last-child { display: block; padding-top: 0; }
+      #nav { padding: 0 20px; }
+      .nav-links { display: none; }
+      .container { padding: 0 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="#hero" class="nav-logo">PIPELINE<span>.UNIFIED</span></a>
+  <ul class="nav-links">
+    <li><a href="#overview" data-i18n="nav.overview">Proyecto</a></li>
+    <li><a href="#pillars" data-i18n="nav.pillars">Pilares</a></li>
+    <li><a href="#goals" data-i18n="nav.goals">Logros</a></li>
+    <li><a href="#decisions" data-i18n="nav.decisions">Decisiones</a></li>
+    <li><a href="#benches" data-i18n="nav.benches">Benches</a></li>
+    <li><a href="#process" data-i18n="nav.process">Proceso</a></li>
+    <li><a href="#pipeline" data-i18n="nav.pipeline">Flujo</a></li>
+    <li><a href="#repos" data-i18n="nav.repos">Repos</a></li>
+  </ul>
+  <div class="nav-right">
+    <a href="https://rastrahm.site/" class="nav-close" data-i18n="nav.close">← Cerrar</a>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <button type="button" class="lang-btn active" data-lang="es">ES</button>
+      <span class="lang-sep">/</span>
+      <button type="button" class="lang-btn" data-lang="en">EN</button>
+    </div>
+  </div>
+</nav>
+
+<section id="hero">
+  <div class="grid-scene"><div class="grid-floor"></div></div>
+  <div class="horizon"></div>
+  <div class="hero-content">
+    <div class="hero-tag" data-i18n="hero.tag">// MÓDULO SOLANA · PORTFOLIO SYSTEMS</div>
+    <h1 class="hero-name" data-i18n="hero.title" data-i18n-html>SOLANA-PIPELINE<br>UNIFIED</h1>
+    <p class="hero-role" data-i18n="hero.role">Rust · Turbine → Bridge → NVMe Engine</p>
+    <p class="hero-sub" data-i18n="hero.sub">
+      Orquestador de aprendizaje que cablea red/FEC (mini-solana-turbine) con persistencia KV (nvme-state-db): colas acotadas, backpressure tipado y ciclo de vida medible — sin reimplementar el disco ni el shred.
+    </p>
+    <div class="hero-ctas">
+      <a href="https://github.com/rastrahm/solana-pipeline-unified" target="_blank" rel="noopener noreferrer" class="btn-neon btn-neon-solid" data-i18n="hero.cta1">Ver en GitHub</a>
+      <a href="https://gitlab.com/rastrahm/solana-pipeline-unified" target="_blank" rel="noopener noreferrer" class="btn-neon" data-i18n="hero.cta2">Ver en GitLab</a>
+    </div>
+  </div>
+</section>
+
+<section id="overview" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--cyan)" data-i18n="ov.eyebrow">// 01 — CONTEXTO</div>
+    <h2 class="sec-title" data-i18n="ov.title">Por qué este proyecto</h2>
+    <div class="neon-line"></div>
+    <p class="sec-lead" data-i18n="ov.lead" data-i18n-html>
+      Tras construir Turbine y el motor NVMe por separado, faltaba la pieza del medio: el <strong>pegamento</strong> de un validador — ciclo de vida, colas y fronteras de responsabilidad.
+      Este crate es ese laboratorio: <strong>orquestación honesta</strong>, no un Agave en miniatura ni un tercer motor de I/O.
+    </p>
+  </div>
+</section>
+
+<section id="pillars" class="section" style="padding-top:0">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--green)" data-i18n="pi.eyebrow">// 02 — TRES PILARES</div>
+    <h2 class="sec-title" data-i18n="pi.title">Qué entrega el orquestador</h2>
+    <div class="neon-line" style="background:linear-gradient(90deg,var(--green),transparent)"></div>
+
+    <div class="pillars-grid">
+      <article class="pillar pillar--cyan">
+        <div class="pillar-num" data-i18n="p1.num">// PILAR_01</div>
+        <h3 class="pillar-title" data-i18n="p1.title">Solo orquestación</h3>
+        <p class="pillar-desc" data-i18n="p1.desc">
+          Arranca y apaga Engine + Turbine. Llama APIs públicas; no abre WAL, no parsea shreds, no habla de O_DIRECT.
+        </p>
+        <ul class="pillar-list">
+          <li data-i18n="p1.l1">start / shutdown / flush</li>
+          <li data-i18n="p1.l2">Path deps a hermanos</li>
+          <li data-i18n="p1.l3">Roles fijos en .cursorrules</li>
+        </ul>
+      </article>
+
+      <article class="pillar pillar--green">
+        <div class="pillar-num" data-i18n="p2.num">// PILAR_02</div>
+        <h3 class="pillar-title" data-i18n="p2.title">Bridge + backpressure</h3>
+        <p class="pillar-desc" data-i18n="p2.desc">
+          Cola acotada crossbeam: try_send tipado. Saturación → BridgeSaturated / PipelineStall, sin bloquear al productor.
+        </p>
+        <ul class="pillar-list">
+          <li data-i18n="p2.l1">Hilo pipeline-bridge</li>
+          <li data-i18n="p2.l2">Claves learn/v1/</li>
+          <li data-i18n="p2.l3">Flush ante cola llena</li>
+        </ul>
+      </article>
+
+      <article class="pillar pillar--yellow">
+        <div class="pillar-num" data-i18n="p3.num">// PILAR_03</div>
+        <h3 class="pillar-title" data-i18n="p3.title">Ingest → Engine</h3>
+        <p class="pillar-desc" data-i18n="p3.desc">
+          Feature simd: Pipeline::ingest_bytes → shards en cola → Engine::put. Demo CLI y recovery al reabrir.
+        </p>
+        <ul class="pillar-list">
+          <li data-i18n="p3.l1">IngestOutcome medible</li>
+          <li data-i18n="p3.l2">Recovery post-shutdown</li>
+          <li data-i18n="p3.l3">Bench e2e Criterion</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="goals" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--purple)" data-i18n="go.eyebrow">// 03 — BÚSQUEDA Y LOGRO</div>
+    <h2 class="sec-title" data-i18n="go.title">Qué se buscó y qué se logró</h2>
+    <div class="neon-line" style="background:linear-gradient(90deg,var(--purple),transparent)"></div>
+    <p class="sec-lead" data-i18n="go.lead">
+      El objetivo no era un validador: era cerrar el cableado red→FEC→cola→disco con fronteras claras y números honestos de laboratorio.
+    </p>
+
+    <div class="goals-grid">
+      <div class="goal-card">
+        <div class="goal-badge" data-i18n="go.sought">SE BUSCÓ</div>
+        <h3 class="goal-title" data-i18n="go.s1t">Pegar dos crates reales</h3>
+        <p class="goal-desc" data-i18n="go.s1d">
+          Entender cómo un TVU-like entrega estado a un almacén tipo AccountsDB sin mezclar responsabilidades ni duplicar lógica.
+        </p>
+      </div>
+      <div class="goal-card">
+        <div class="goal-badge goal-badge--ok" data-i18n="go.achieved">SE LOGRÓ</div>
+        <h3 class="goal-title" data-i18n="go.a1t">Pipeline e2e cerrado</h3>
+        <p class="goal-desc" data-i18n="go.a1d">
+          Fases 0–8: stubs → deps → lifecycle → bridge → ingest → flush/recovery → CLI demo → benches Criterion.
+        </p>
+      </div>
+      <div class="goal-card">
+        <div class="goal-badge" data-i18n="go.sought">SE BUSCÓ</div>
+        <h3 class="goal-title" data-i18n="go.s2t">Backpressure explícito</h3>
+        <p class="goal-desc" data-i18n="go.s2d">
+          Colas acotadas, errores tipados y política de flush documentada — no “esperar forever” en el hot path del productor.
+        </p>
+      </div>
+      <div class="goal-card">
+        <div class="goal-badge goal-badge--ok" data-i18n="go.achieved">SE LOGRÓ</div>
+        <h3 class="goal-title" data-i18n="go.a2t">Lab medible y honesto</h3>
+        <p class="goal-desc" data-i18n="go.a2d">
+          Claves learn/v1/, demo --demo, recovery verificable y benches que admiten que el WAL O_SYNC domina submit_durable.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="decisions" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--green)" data-i18n="dec.eyebrow">// 04 — DECISIONES TÉCNICAS</div>
+    <h2 class="sec-title" data-i18n="dec.title">Motivo detrás de cada choice</h2>
+    <div class="neon-line" style="background:linear-gradient(90deg,var(--green),transparent)"></div>
+    <p class="sec-lead" data-i18n="dec.lead" data-i18n-html>
+      Cada restricción fuerza el patrón correcto: este crate <strong>orquesta</strong>; Turbine hace red/FEC; nvme hace disco.
+      Si una fase pide WAL o parseo aquí, queda fuera.
+    </p>
+
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th data-i18n="dec.th1">Decisión</th>
+          <th data-i18n="dec.th2">Motivo / tradeoff</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-i18n="dec.r1a">Solo APIs públicas de hermanos</td>
+          <td data-i18n="dec.r1b">No duplicar FEC, arena, WAL ni SST; el aprendizaje es el cableado, no un tercer motor.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r2a">Persistencia solo vía Engine</td>
+          <td data-i18n="dec.r2b">put/get/delete/flush; el orquestador nunca abre archivos de estado ni menciona O_DIRECT.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r3a">Cola acotada + try_send</td>
+          <td data-i18n="dec.r3b">Backpressure tipado (BridgeSaturated / PipelineStall) en vez de bloquear workers de red indefinidamente.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r4a">thiserror en lib; anyhow solo en main</td>
+          <td data-i18n="dec.r4b">Errores de pipeline tipados y zero-cost; bootstrap del binario con contexto flexible.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r5a">Features uring/simd reenviadas</td>
+          <td data-i18n="dec.r5b">Mismo contrato que turbine: CI sin io_uring usa --features simd; default = ambos.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r6a">Claves learn/v1/…</td>
+          <td data-i18n="dec.r6b">Convención educativa explícita: no fingir encoding de AccountsDB ni ledger real.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r7a">Analogía TVU / AccountsDB, no Blockstore</td>
+          <td data-i18n="dec.r7b">Alcance acotado: estado KV tras FEC; ledger de shreds y replay quedan fuera.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r8a">Fases con autorización explícita</td>
+          <td data-i18n="dec.r8b">TDD por gate; evita mezclar lifecycle, bridge e ingest en un solo PR opaco.</td>
+        </tr>
+        <tr>
+          <td data-i18n="dec.r9a">Sin unwrap/expect en src/</td>
+          <td data-i18n="dec.r9b">Producción tipada; panics reservados a tests y benches.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="benches" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--yellow)" data-i18n="be.eyebrow">// 05 — BENCHMARKS</div>
+    <h2 class="sec-title" data-i18n="be.title">Medir el cableado, no fingir mainnet</h2>
+    <div class="neon-line" style="background:linear-gradient(90deg,var(--yellow),transparent)"></div>
+    <p class="sec-lead" data-i18n="be.lead" data-i18n-html>
+      Fase 8: Criterion e2e. El <strong>WAL O_SYNC</strong> de nvme domina <code>submit_durable</code>; el ingest sin open/close es órdenes de magnitud más rápido.
+      Host: Intel Core Ultra 9 275HX · Linux 6.18.7 · NVMe ext4.
+    </p>
+
+    <div class="bench-stats">
+      <div class="bench-stat">
+        <div class="bench-stat-num">~10.1 ms</div>
+        <div class="bench-stat-label" data-i18n="be.s1">submit_durable / op</div>
+      </div>
+      <div class="bench-stat">
+        <div class="bench-stat-num">~99/s</div>
+        <div class="bench-stat-label" data-i18n="be.s2">ops durables</div>
+      </div>
+      <div class="bench-stat">
+        <div class="bench-stat-num">~232 µs</div>
+        <div class="bench-stat-label" data-i18n="be.s3">ingest data+code</div>
+      </div>
+      <div class="bench-stat">
+        <div class="bench-stat-num">~60.2 ms</div>
+        <div class="bench-stat-label" data-i18n="be.s4">par + start/stop</div>
+      </div>
+    </div>
+
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th data-i18n="be.th1">Bench</th>
+          <th data-i18n="be.th2">Qué mide</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>submit_32b_durable</td>
+          <td data-i18n="be.r1">Encolar + esperar get; WAL síncrono domina (~99 elem/s)</td>
+        </tr>
+        <tr>
+          <td>submit_durable manual n=40</td>
+          <td data-i18n="be.r2">mean ~9.8 ms · p50 ~9.8 · p99 ~10.3 · ~102 ops/s</td>
+        </tr>
+        <tr>
+          <td>data_plus_code_reconstruct</td>
+          <td data-i18n="be.r3">Criterion incluye start/shutdown del Orchestrator por iteración</td>
+        </tr>
+        <tr>
+          <td>ingest_data+code manual n=8</td>
+          <td data-i18n="be.r4">Solo ingest (sin open/close): mean ~232 µs · p50 ~269 µs</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div id="stack">
+  <div class="marquee-wrapper">
+    <div class="marquee-track">
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>Rust 2021</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--green)"></div>mini-solana-turbine</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--yellow)"></div>nvme-state-db</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--purple)"></div>crossbeam-channel</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>thiserror</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--green)"></div>Engine::put</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--yellow)"></div>criterion</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--purple)"></div>Orchestrator</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>Bridge</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>Rust 2021</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--green)"></div>mini-solana-turbine</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--yellow)"></div>nvme-state-db</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--purple)"></div>crossbeam-channel</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>thiserror</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--green)"></div>Engine::put</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--yellow)"></div>criterion</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--purple)"></div>Orchestrator</div>
+      <div class="m-item"><div class="m-dot" style="background:var(--cyan)"></div>Bridge</div>
+    </div>
+  </div>
+</div>
+
+<section id="process" class="section">
+  <div class="container">
+    <div class="process-grid">
+      <div>
+        <div class="sec-eyebrow" style="color:var(--purple)" data-i18n="pr.eyebrow">// 06 — PROCESO</div>
+        <h2 class="sec-title" data-i18n="pr.title">Fases 0–8 cerradas</h2>
+        <div class="neon-line" style="background:linear-gradient(90deg,var(--purple),transparent)"></div>
+        <p class="sec-lead" style="margin-bottom:24px" data-i18n="pr.lead">
+          Desarrollo por gates autorizados: plan, stubs, deps path, lifecycle, bridge, ingest, flush/recovery, CLI y benches.
+        </p>
+
+        <div class="phase-list">
+          <div class="phase-row"><span class="phase-id">00–01</span><span class="phase-name" data-i18n="ph.01">Plan + crate stubs</span><span class="phase-status">OK</span></div>
+          <div class="phase-row"><span class="phase-id">02–03</span><span class="phase-name" data-i18n="ph.23">Deps path + Orchestrator</span><span class="phase-status">OK</span></div>
+          <div class="phase-row"><span class="phase-id">04–05</span><span class="phase-name" data-i18n="ph.45">Bridge + ingest→Engine</span><span class="phase-status">OK</span></div>
+          <div class="phase-row"><span class="phase-id">06–07</span><span class="phase-name" data-i18n="ph.67">Flush/recovery + CLI demo</span><span class="phase-status">OK</span></div>
+          <div class="phase-row"><span class="phase-id">08</span><span class="phase-name" data-i18n="ph.8x">Bench e2e Criterion</span><span class="phase-status">OK</span></div>
+        </div>
+
+        <div class="stats">
+          <div class="a-stat">
+            <div class="a-stat-num">9</div>
+            <div class="a-stat-label" data-i18n="st.1">Fases</div>
+          </div>
+          <div class="a-stat">
+            <div class="a-stat-num">2</div>
+            <div class="a-stat-label" data-i18n="st.2">Crates hermanos</div>
+          </div>
+          <div class="a-stat">
+            <div class="a-stat-num">0</div>
+            <div class="a-stat-label" data-i18n="st.3">Disco en este crate</div>
+          </div>
+          <div class="a-stat">
+            <div class="a-stat-num">2</div>
+            <div class="a-stat-label" data-i18n="st.4">Features (uring/simd)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-terminal">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#ff5f56"></div>
+          <div class="term-dot" style="background:#ffbd2e"></div>
+          <div class="term-dot" style="background:#27c93f"></div>
+          <span class="term-label" data-i18n="term.label">rolando@strahm:~/solana-pipeline-unified</span>
+        </div>
+        <div class="term-body">
+          <div><span class="term-prompt">$ </span><span data-i18n="term.1">cargo test</span></div>
+          <div class="term-ok" data-i18n="term.2">[PASS] suite · phases green</div>
+          <div>&nbsp;</div>
+          <div><span class="term-prompt">$ </span><span data-i18n="term.3">cargo run --features simd -- --demo</span></div>
+          <div class="term-dim" data-i18n="term.4">ingest → bridge → Engine · shards OK</div>
+          <div>&nbsp;</div>
+          <div><span class="term-prompt">$ </span><span data-i18n="term.5">echo status</span></div>
+          <div class="term-ok" data-i18n="term.6">PHASES_0_8_CLOSED · LEARNING_DONE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--yellow)" data-i18n="pl.eyebrow">// 07 — FLUJO DEL DATO</div>
+    <h2 class="sec-title" data-i18n="pl.title">De shred a Engine::put</h2>
+    <div class="neon-line" style="background:linear-gradient(90deg,var(--yellow),transparent)"></div>
+    <p class="sec-lead" data-i18n="pl.lead">
+      Bytes sintéticos (o UDP vía turbine) entran al Pipeline, se reconstruyen con FEC, cruzan la cola del bridge y persisten en nvme — el orquestador solo mueve y gobierna.
+    </p>
+
+    <div class="campaigns-grid">
+      <div class="camp">
+        <div class="camp-id">01</div>
+        <h3 class="camp-title" data-i18n="c1.t">Ingest</h3>
+        <p class="camp-desc" data-i18n="c1.d">Pipeline::ingest_bytes (simd): parse + FEC.</p>
+      </div>
+      <div class="camp">
+        <div class="camp-id">02</div>
+        <h3 class="camp-title" data-i18n="c2.t">Outcome</h3>
+        <p class="camp-desc" data-i18n="c2.d">Reconstrucción + plan de forward (sin send en demo).</p>
+      </div>
+      <div class="camp">
+        <div class="camp-id">03</div>
+        <h3 class="camp-title" data-i18n="c3.t">Queue</h3>
+        <p class="camp-desc" data-i18n="c3.d">try_send a cola acotada; stall si satura.</p>
+      </div>
+      <div class="camp">
+        <div class="camp-id">04</div>
+        <h3 class="camp-title" data-i18n="c4.t">Put</h3>
+        <p class="camp-desc" data-i18n="c4.d">Hilo bridge → Engine::put (learn/v1/shard/N).</p>
+      </div>
+      <div class="camp">
+        <div class="camp-id">05</div>
+        <h3 class="camp-title" data-i18n="c5.t">Flush</h3>
+        <p class="camp-desc" data-i18n="c5.d">schedule_flush / recovery al reabrir data-dir.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="repos" class="section">
+  <div class="container">
+    <div class="sec-eyebrow" style="color:var(--cyan)" data-i18n="re.eyebrow">// 08 — CÓDIGO ABIERTO</div>
+    <h2 class="sec-title" data-i18n="re.title">Repositorios</h2>
+    <div class="neon-line"></div>
+    <p class="sec-lead" data-i18n="re.lead">
+      El mismo código está en GitHub y GitLab: fuente, FASES.md, tests de integración, CLI demo y benches e2e.
+    </p>
+
+    <div class="repo-grid">
+      <a class="repo-card" href="https://github.com/rastrahm/solana-pipeline-unified" target="_blank" rel="noopener noreferrer">
+        <div class="repo-label">GitHub</div>
+        <div class="repo-name">rastrahm / solana-pipeline-unified</div>
+        <div class="repo-url">https://github.com/rastrahm/solana-pipeline-unified</div>
+      </a>
+      <a class="repo-card" href="https://gitlab.com/rastrahm/solana-pipeline-unified" target="_blank" rel="noopener noreferrer">
+        <div class="repo-label">GitLab</div>
+        <div class="repo-name">rastrahm / solana-pipeline-unified</div>
+        <div class="repo-url">https://gitlab.com/rastrahm/solana-pipeline-unified</div>
+      </a>
+    </div>
+
+    <div class="hero-ctas" style="justify-content:flex-start;margin-top:40px;animation:none">
+      <a href="https://rastrahm.site/" class="btn-neon btn-neon-solid" data-i18n="nav.close">← Cerrar</a>
+      <a href="mailto:rastrahm@gmail.com" class="btn-neon" data-i18n="re.cta">Contactar</a>
+      <a href="https://www.linkedin.com/in/rolando-strahm/" target="_blank" rel="noopener noreferrer" class="btn-neon" data-i18n="re.linkedin">LinkedIn</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div data-i18n="ft.left">ROLANDO STRAHM — solana-pipeline-unified · Portfolio</div>
+  <div data-i18n="ft.right">RUST · ORCHESTRATION · BRIDGE · ALL_SYSTEMS_OPERATIONAL</div>
+</footer>
+
+<script src="i18n.js"></script>
+<script>
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 20);
+  }, { passive: true });
+</script>
+</body>
+</html>
